@@ -53,7 +53,9 @@ def get_b_folders(base_dir):
     """Retrieve all folders in base_dir that match the pattern B#."""
     pattern = os.path.join(base_dir, "B*")
     all_folders = [f for f in glob.glob(pattern) if os.path.isdir(f)]
-    b_folders = [os.path.basename(folder) for folder in all_folders if os.path.basename(folder).startswith('B') and os.path.basename(folder)[1:].isdigit()]
+    b_folders = [os.path.basename(folder) for folder in all_folders 
+                if os.path.basename(folder).upper().startswith('B') and 
+                os.path.basename(folder)[1:].isdigit()]
     if not b_folders:
         logging.error(f"No 'B#' folders found in {base_dir}.")
     else:
@@ -61,22 +63,31 @@ def get_b_folders(base_dir):
     return natsorted(b_folders)
 
 def get_image_files(folder_path):
-    """Retrieve all image files in a folder, supporting multiple formats and case-insensitive extensions."""
-    supported_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff']
+    """Retrieve all image files in a folder, supporting .png, .jpg, .jpeg (case-insensitive)."""
+    supported_extensions = ['.png', '.jpg', '.jpeg']
     image_files = []
     for ext in supported_extensions:
         # Use glob with case-insensitive patterns
         image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext}")))
         image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext.upper()}")))
-    # Remove duplicates if any
-    image_files = list(set(image_files))
+    # Remove duplicates if any and exclude hidden files
+    image_files = [f for f in set(image_files) if not os.path.basename(f).startswith('.')]
     # Sort the files naturally
     image_files = natsorted([os.path.basename(f) for f in image_files])
     logging.debug(f"Images detected in '{folder_path}': {image_files}")
     return image_files
 
+def find_reference_image(image_files):
+    """Find the image named ',' among the list of image files."""
+    # Look for image named ',' with any supported extension
+    for img in image_files:
+        name, ext = os.path.splitext(img)
+        if name == ",":
+            return img
+    return None
+
 def load_image(image_path):
-    """Load an image in grayscale, supporting multiple formats."""
+    """Load an image in grayscale."""
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     return image
 
@@ -102,8 +113,11 @@ def process_folders(base_dir, folders):
         
         logging.info(f"Detected images in '{folder}': {image_files}")
         
-        # Select the first image alphabetically as the reference
-        ref_image_name = image_files[0]
+        # Find the reference image named ','
+        ref_image_name = find_reference_image(image_files)
+        if not ref_image_name:
+            logging.warning(f"No reference image named ',' found in {folder_path}. Skipping...")
+            continue
         ref_image_path = os.path.join(folder_path, ref_image_name)
         ref_image = load_image(ref_image_path)
         
@@ -113,7 +127,11 @@ def process_folders(base_dir, folders):
         
         logging.info(f"Processing folder '{folder}' with reference image '{ref_image_name}'")
         
-        for img_name in image_files[1:]:
+        # Compare all other images to the reference
+        for img_name in image_files:
+            if img_name == ref_image_name:
+                continue  # Skip the reference image itself
+            
             img_path = os.path.join(folder_path, img_name)
             comp_image = load_image(img_path)
             
@@ -164,7 +182,7 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         # Interpolated values
         smooth_data = griddata(points, values, (y_grid, x_grid), method='cubic')
     
-        # Define original labels for syntaxes and batches
+        # Define original labels for compared images and folders
         original_columns = heatmap_data.columns
         original_rows = heatmap_data.index
     
@@ -184,14 +202,14 @@ def generate_heatmap(df_results, degree=50, output_path=None):
             vmax=1
         )
     
-        # Add labels for syntaxes (x-axis) and batches (y-axis)
+        # Add labels for compared images (x-axis) and batches (y-axis)
         ax.set_xticks(xticks)
         ax.set_yticks(yticks)
         ax.set_xticklabels(original_columns, rotation=45, ha="right", color="white")
         ax.set_yticklabels(original_rows, color="white")
     
         # Title and axis labels
-        plt.title("SSIM Heatmap (Compared Images to Reference)", color="white")
+        plt.title("SSIM Heatmap (Compared Images to Reference ',')", color="white")
         plt.xlabel("Compared Image (Syntax)", color="white")
         plt.ylabel("Folder (Batch)", color="white")
         plt.tight_layout()
