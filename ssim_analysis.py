@@ -56,15 +56,23 @@ def get_b_folders(base_dir):
     b_folders = [os.path.basename(folder) for folder in all_folders if os.path.basename(folder).startswith('B') and os.path.basename(folder)[1:].isdigit()]
     if not b_folders:
         logging.error(f"No 'B#' folders found in {base_dir}.")
+    else:
+        logging.info(f"Detected 'B#' folders: {b_folders}")
     return natsorted(b_folders)
 
 def get_image_files(folder_path):
-    """Retrieve all image files in a folder, supporting multiple formats."""
+    """Retrieve all image files in a folder, supporting multiple formats and case-insensitive extensions."""
     supported_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff']
     image_files = []
     for ext in supported_extensions:
+        # Use glob with case-insensitive patterns
         image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext}")))
+        image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext.upper()}")))
+    # Remove duplicates if any
+    image_files = list(set(image_files))
+    # Sort the files naturally
     image_files = natsorted([os.path.basename(f) for f in image_files])
+    logging.debug(f"Images detected in '{folder_path}': {image_files}")
     return image_files
 
 def load_image(image_path):
@@ -74,8 +82,12 @@ def load_image(image_path):
 
 def calculate_ssim(ref_image, comp_image):
     """Calculate the Structural Similarity Index (SSIM) between two images."""
-    ssim_score, _ = ssim(ref_image, comp_image, full=True)
-    return ssim_score
+    try:
+        ssim_score, _ = ssim(ref_image, comp_image, full=True)
+        return ssim_score
+    except ValueError as e:
+        logging.error(f"SSIM calculation failed: {e}")
+        return None
 
 def process_folders(base_dir, folders):
     """Process each folder and compute SSIM scores."""
@@ -87,6 +99,8 @@ def process_folders(base_dir, folders):
         if not image_files:
             logging.warning(f"No images found in {folder_path}. Skipping...")
             continue
+        
+        logging.info(f"Detected images in '{folder}': {image_files}")
         
         # Select the first image alphabetically as the reference
         ref_image_name = image_files[0]
@@ -112,6 +126,9 @@ def process_folders(base_dir, folders):
                 continue
             
             ssim_score = calculate_ssim(ref_image, comp_image)
+            if ssim_score is None:
+                logging.warning(f"Failed to calculate SSIM for image '{img_name}' in '{folder}'. Skipping...")
+                continue
             
             results.append({
                 "Folder": folder,
