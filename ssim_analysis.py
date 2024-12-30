@@ -10,6 +10,15 @@ from skimage.metrics import structural_similarity as ssim
 from natsort import natsorted
 import argparse
 import sys
+import glob
+import logging
+
+def setup_logging():
+    """Configure the logging settings."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(message)s'
+    )
 
 def setup_plotting():
     """Configure the plotting aesthetics."""
@@ -31,14 +40,6 @@ def parse_arguments():
         help='Base directory containing the image folders.'
     )
     parser.add_argument(
-        '--folders', type=str, nargs='+', default=[f"B{i}" for i in range(1, 11)],
-        help='List of folder names to process. Default: B1 B2 ... B10'
-    )
-    parser.add_argument(
-        '--image_names', type=str, nargs='+', default=[",", ".", ";", "pipe", "BREAK"],
-        help='List of image names to compare. The first image is used as the reference.'
-    )
-    parser.add_argument(
         '--degree', type=int, default=50,
         help='Degree for interpolation in heatmap. Default: 50'
     )
@@ -48,8 +49,26 @@ def parse_arguments():
     )
     return parser.parse_args()
 
+def get_b_folders(base_dir):
+    """Retrieve all folders in base_dir that match the pattern B#."""
+    pattern = os.path.join(base_dir, "B*")
+    all_folders = [f for f in glob.glob(pattern) if os.path.isdir(f)]
+    b_folders = [os.path.basename(folder) for folder in all_folders if os.path.basename(folder).startswith('B') and os.path.basename(folder)[1:].isdigit()]
+    if not b_folders:
+        logging.error(f"No 'B#' folders found in {base_dir}.")
+    return natsorted(b_folders)
+
+def get_image_files(folder_path):
+    """Retrieve all image files in a folder, supporting multiple formats."""
+    supported_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff']
+    image_files = []
+    for ext in supported_extensions:
+        image_files.extend(glob.glob(os.path.join(folder_path, f"*{ext}")))
+    image_files = natsorted([os.path.basename(f) for f in image_files])
+    return image_files
+
 def load_image(image_path):
-    """Load an image in grayscale."""
+    """Load an image in grayscale, supporting multiple formats."""
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     return image
 
@@ -58,34 +77,45 @@ def calculate_ssim(ref_image, comp_image):
     ssim_score, _ = ssim(ref_image, comp_image, full=True)
     return ssim_score
 
-def process_folders(base_dir, folders, image_names):
+def process_folders(base_dir, folders):
     """Process each folder and compute SSIM scores."""
     results = []
     for folder in folders:
         folder_path = os.path.join(base_dir, folder)
-        ref_image_path = os.path.join(folder_path, f"{image_names[0]}.png")  # Reference image
+        image_files = get_image_files(folder_path)
         
-        ref_image = load_image(ref_image_path)
-        if ref_image is None:
-            print(f"Reference image not found in {folder_path}. Skipping...", file=sys.stderr)
+        if not image_files:
+            logging.warning(f"No images found in {folder_path}. Skipping...")
             continue
         
-        for img_name in image_names[1:]:
-            img_path = os.path.join(folder_path, f"{img_name}.png")
+        # Select the first image alphabetically as the reference
+        ref_image_name = image_files[0]
+        ref_image_path = os.path.join(folder_path, ref_image_name)
+        ref_image = load_image(ref_image_path)
+        
+        if ref_image is None:
+            logging.warning(f"Reference image '{ref_image_name}' not found or unreadable in {folder_path}. Skipping...")
+            continue
+        
+        logging.info(f"Processing folder '{folder}' with reference image '{ref_image_name}'")
+        
+        for img_name in image_files[1:]:
+            img_path = os.path.join(folder_path, img_name)
             comp_image = load_image(img_path)
             
             if comp_image is None:
-                print(f"Image {img_name}.png not found in {folder_path}. Skipping...", file=sys.stderr)
+                logging.warning(f"Image '{img_name}' not found or unreadable in {folder_path}. Skipping...")
                 continue
             
             if ref_image.shape != comp_image.shape:
-                print(f"Image {img_name}.png in {folder_path} has different dimensions. Skipping...", file=sys.stderr)
+                logging.warning(f"Image '{img_name}' in {folder_path} has different dimensions. Skipping...")
                 continue
             
             ssim_score = calculate_ssim(ref_image, comp_image)
             
             results.append({
                 "Folder": folder,
+                "Reference Image": ref_image_name,
                 "Compared Image": img_name,
                 "SSIM": ssim_score
             })
@@ -97,10 +127,11 @@ def display_results(df_results):
         table = tabulate(df_results, headers='keys', tablefmt='grid', floatfmt=".4f")
         print(table)
     else:
-        print("No results to display. Ensure the images and paths are correct.", file=sys.stderr)
+        logging.error("No results to display. Ensure the images and paths are correct.")
 
 def generate_heatmap(df_results, degree=50, output_path=None):
     """Generate and display/save a heatmap of SSIM scores."""
+    # Pivot the DataFrame for heatmap visualization
     heatmap_data = df_results.pivot(index="Folder", columns="Compared Image", values="SSIM")
     
     if heatmap_data is not None and not heatmap_data.empty:
@@ -143,25 +174,34 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         ax.set_yticklabels(original_rows, color="white")
     
         # Title and axis labels
-        plt.title("SSIM Heatmap (Syntaxes compared to Comma (,))", color="white")
+        plt.title("SSIM Heatmap (Compared Images to Reference)", color="white")
         plt.xlabel("Compared Image (Syntax)", color="white")
         plt.ylabel("Folder (Batch)", color="white")
         plt.tight_layout()
         
         if output_path:
             plt.savefig(output_path, dpi=300)
-            print(f"Heatmap saved to {output_path}")
+            logging.info(f"Heatmap saved to {output_path}")
         else:
             plt.show()
     else:
-        print("Heatmap data is empty. No valid comparisons found.", file=sys.stderr)
+        logging.error("Heatmap data is empty. No valid comparisons found.")
 
 def main():
     """Main function to orchestrate SSIM analysis."""
+    setup_logging()
     args = parse_arguments()
     setup_plotting()
     
-    df_results = process_folders(args.base_dir, args.folders, args.image_names)
+    b_folders = get_b_folders(args.base_dir)
+    if not b_folders:
+        sys.exit(1)
+    
+    df_results = process_folders(args.base_dir, b_folders)
+    
+    if df_results.empty:
+        logging.error("No SSIM results were generated. Exiting.")
+        sys.exit(1)
     
     # Sort the DataFrame by folder names naturally
     sorted_folders = natsorted(df_results['Folder'].unique())
