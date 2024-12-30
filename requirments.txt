@@ -1,0 +1,9 @@
+opencv-python
+pandas
+tabulate
+numpy
+seaborn
+matplotlib
+scipy
+scikit-image
+natsort
