@@ -30,7 +30,7 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
    
 3. **Run ssim_analysis.py**   
    ```bash
-   python ssim_analysis.py --base_dir "PATH_TO_DATA_FOLDER"
+   python ssim_analysis.py --base_dir "PATH_TO_DATA_FOLDER" --metric "ssim / sad"
    ```
    ```bash
    data folder/
