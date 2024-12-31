@@ -1,6 +1,6 @@
 # SSIM/SAD Analysis Tool
 
-A Python tool to compute Structural Similarity Index (SSIM) between images in specified folders and visualize the results as a heatmap.
+A Python tool to compute Structural Similarity Index (SSIM) and Sum of Absolute Differences (SAD) between images in specified folders and visualize the results as a heatmap.
 
 ## Features
 
