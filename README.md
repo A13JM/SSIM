@@ -5,9 +5,9 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
 ## Features
 
 - **Compare Images:** Automatically compares images within specified folders.
-- **SSIM Calculation:** Calculates the Structural Similarity Index (SSIM) between reference and compared images.
-- **Tabular Results:** Displays SSIM scores in a neatly formatted table.
-- **Heatmap Visualization:** Generates a heatmap to visualize SSIM scores across different images and folders.
+- **SSIM and SAD Calculation:** Calculates the Structural Similarity Index (SSIM) or Sum of Absolute Differences (SAD) between reference and compared images.
+- **Tabular Results:** Displays SSIM/SAD scores in a neatly formatted table.
+- **Heatmap Visualization:** Generates a heatmap to visualize SSIM/SAD scores across different images and folders.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
 
    ```bash
    git clone https://github.com/yourusername/ssim-analysis-tool.git
-   cd SSIM/SAD
+   cd SSIM_SAD
    ```
    
 2. **Install Requirements**   
