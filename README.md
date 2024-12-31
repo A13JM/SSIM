@@ -36,5 +36,5 @@ A Python tool to compute Structural Similarity Index (SSIM) and Sum of Absolute 
    data folder/
    │
    └── Batches "B#"
-      └── Images (Supports "," "." ";" "BREAK" "pipe" "AND" "OR")
+      └── Images (Supports image names: "," "." ";" "BREAK" "pipe" "AND" "OR")
    ```
