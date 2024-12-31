@@ -20,7 +20,7 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
 
    ```bash
    git clone https://github.com/yourusername/ssim-analysis-tool.git
-   cd SSIM
+   cd SSIM/SAD
    ```
    
 2. **Install Requirements**   
