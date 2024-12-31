@@ -32,7 +32,7 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
    ```bash
    python ssim_analysis.py --base_dir "PATH_TO_DATA_FOLDER"
    ```
-
+```bash
    data folder/
 │
 └── Batches "B#"
