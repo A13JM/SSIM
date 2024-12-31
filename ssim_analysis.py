@@ -25,7 +25,7 @@ def setup_plotting():
 
 def parse_arguments():
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="SSIM Analysis Tool")
+    parser = argparse.ArgumentParser(description="SSIM/SAD Analysis Tool")
     parser.add_argument(
         '--base_dir', type=str, required=True,
         help='Base directory containing the image folders.'
@@ -35,7 +35,7 @@ def parse_arguments():
         help='List of folder names to process. Default: B1 B2 ... B10'
     )
     parser.add_argument(
-        '--image_names', type=str, nargs='+', default=[",", ".", ";", "pipe", "BREAK", "!", "AND", "OR",],
+        '--image_names', type=str, nargs='+', default=[",", ".", ";", "pipe", "BREAK", "AND", "OR"],
         help='List of image names to compare. The first image is used as the reference.'
     )
     parser.add_argument(
@@ -46,6 +46,10 @@ def parse_arguments():
         '--output_heatmap', type=str, default=None,
         help='Path to save the heatmap figure. If not provided, the heatmap will be displayed but not saved.'
     )
+    parser.add_argument(
+        '--metric', type=str, choices=['ssim', 'sad'], default='ssim',
+        help='Metric to use for comparison: "ssim" (default) or "sad".'
+    )
     return parser.parse_args()
 
 def load_image(image_path):
@@ -53,13 +57,19 @@ def load_image(image_path):
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     return image
 
-def calculate_ssim(ref_image, comp_image):
+def calculate_ssim_score(ref_image, comp_image):
     """Calculate the Structural Similarity Index (SSIM) between two images."""
     ssim_score, _ = ssim(ref_image, comp_image, full=True)
     return ssim_score
 
-def process_folders(base_dir, folders, image_names):
-    """Process each folder and compute SSIM scores."""
+def calculate_sad(ref_image, comp_image):
+    """Calculate the Sum of Absolute Differences (SAD) between two images."""
+    abs_diff = cv2.absdiff(ref_image, comp_image)
+    sad = abs_diff.sum()
+    return sad
+
+def process_folders(base_dir, folders, image_names, metric):
+    """Process each folder and compute SSIM or SAD scores."""
     results = []
     for folder in folders:
         folder_path = os.path.join(base_dir, folder)
@@ -82,26 +92,38 @@ def process_folders(base_dir, folders, image_names):
                 print(f"Image {img_name}.png in {folder_path} has different dimensions. Skipping...", file=sys.stderr)
                 continue
             
-            ssim_score = calculate_ssim(ref_image, comp_image)
+            if metric == 'ssim':
+                score = calculate_ssim_score(ref_image, comp_image)
+                score_label = 'SSIM'
+            else:
+                score = calculate_sad(ref_image, comp_image)
+                score_label = 'SAD'
             
             results.append({
                 "Folder": folder,
                 "Compared Image": img_name,
-                "SSIM": ssim_score
+                score_label: score
             })
     return pd.DataFrame(results)
 
-def display_results(df_results):
-    """Display the SSIM results in a tabular format."""
+def display_results(df_results, metric):
+    """Display the SSIM/SAD results in a tabular format."""
     if not df_results.empty:
-        table = tabulate(df_results, headers='keys', tablefmt='grid', floatfmt=".4f")
+        table = tabulate(df_results, headers='keys', tablefmt='grid', floatfmt=".4f" if metric == 'ssim' else ".0f")
         print(table)
     else:
         print("No results to display. Ensure the images and paths are correct.", file=sys.stderr)
 
-def generate_heatmap(df_results, degree=50, output_path=None):
-    """Generate and display/save a heatmap of SSIM scores."""
-    heatmap_data = df_results.pivot(index="Folder", columns="Compared Image", values="SSIM")
+def generate_heatmap(df_results, degree=50, output_path=None, metric='ssim'):
+    """Generate and display/save a heatmap of SSIM/SAD scores."""
+    if metric == 'ssim':
+        pivot_column = "SSIM"
+        title_metric = "SSIM Score"
+    else:
+        pivot_column = "SAD"
+        title_metric = "SAD Value"
+    
+    heatmap_data = df_results.pivot(index="Folder", columns="Compared Image", values=pivot_column)
     
     if heatmap_data is not None and not heatmap_data.empty:
         # Interpolate data for smoother gradients
@@ -113,8 +135,12 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         points = np.array([[i, j] for i in range(heatmap_data.shape[0]) for j in range(heatmap_data.shape[1])])
         values = heatmap_data.values.flatten()
     
-        # Interpolated values
-        smooth_data = griddata(points, values, (y_grid, x_grid), method='cubic')
+        # Handle cases where all values might be the same
+        if np.all(values == values[0]):
+            smooth_data = np.tile(values, (y_grid.shape[0], x_grid.shape[1]))
+        else:
+            # Interpolated values
+            smooth_data = griddata(points, values, (y_grid, x_grid), method='cubic')
     
         # Define original labels for syntaxes and batches
         original_columns = heatmap_data.columns
@@ -124,16 +150,16 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         xticks = np.linspace(0, smooth_data.shape[1] - 1, len(original_columns))
         yticks = np.linspace(0, smooth_data.shape[0] - 1, len(original_rows))
     
-        # Plot the smoother heatmap with plasma colormap
+        # Plot the smoother heatmap with appropriate colormap
         plt.figure(figsize=(12, 8))
         ax = sns.heatmap(
             smooth_data,
             cmap="plasma",
-            cbar_kws={"label": "SSIM Score", "format": "%.2f"},
+            cbar_kws={"label": title_metric, "format": "%.4f" if metric == 'ssim' else "%.0f"},
             xticklabels=False,
             yticklabels=False,
             vmin=0,
-            vmax=1
+            vmax=1 if metric == 'ssim' else None  # For SSIM, set max to 1
         )
     
         # Add labels for syntaxes (x-axis) and batches (y-axis)
@@ -143,7 +169,7 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         ax.set_yticklabels(original_rows, color="white")
     
         # Title and axis labels
-        plt.title("SSIM Heatmap (Syntaxes compared to Comma (,))", color="white")
+        plt.title(f"{metric.upper()} Heatmap (Syntaxes compared to {df_results['Compared Image'].iloc[0]})", color="white")
         plt.xlabel("Compared Image (Syntax)", color="white")
         plt.ylabel("Folder (Batch)", color="white")
         plt.tight_layout()
@@ -157,20 +183,20 @@ def generate_heatmap(df_results, degree=50, output_path=None):
         print("Heatmap data is empty. No valid comparisons found.", file=sys.stderr)
 
 def main():
-    """Main function to orchestrate SSIM analysis."""
+    """Main function to orchestrate SSIM/SAD analysis."""
     args = parse_arguments()
     setup_plotting()
     
-    df_results = process_folders(args.base_dir, args.folders, args.image_names)
+    df_results = process_folders(args.base_dir, args.folders, args.image_names, args.metric)
     
     # Sort the DataFrame by folder names naturally
     sorted_folders = natsorted(df_results['Folder'].unique())
     df_results['Folder'] = pd.Categorical(df_results['Folder'], categories=sorted_folders, ordered=True)
     df_results = df_results.sort_values('Folder')
     
-    display_results(df_results)
+    display_results(df_results, args.metric)
     
-    generate_heatmap(df_results, degree=args.degree, output_path=args.output_heatmap)
+    generate_heatmap(df_results, degree=args.degree, output_path=args.output_heatmap, metric=args.metric)
 
 if __name__ == "__main__":
     main()
