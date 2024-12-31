@@ -1,4 +1,4 @@
-# SSIM Analysis Tool
+# SSIM/SAD Analysis Tool
 
 A Python tool to compute Structural Similarity Index (SSIM) between images in specified folders and visualize the results as a heatmap.
 
@@ -28,9 +28,9 @@ A Python tool to compute Structural Similarity Index (SSIM) between images in sp
    pip install -r requirements.txt
    ```
    
-3. **Run ssim_analysis.py**   
+3. **Run ssim_sad_analysis.py**   
    ```bash
-   python ssim_analysis.py --base_dir "PATH_TO_DATA_FOLDER" --metric "ssim / sad"
+   python ssim/sad_analysis.py --base_dir "PATH_TO_DATA_FOLDER" --metric "ssim / sad"
    ```
    ```bash
    data folder/
